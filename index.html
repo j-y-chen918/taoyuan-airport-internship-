@@ -109,6 +109,7 @@ const INTERVAL_MS = 3600;
 const TRANSITION_MS = 800;
 const TYPE_MS_PER_CHAR = 18;
 const USE_PHOTOS_TXT = true;
+const MANUAL_GRACE_MS = 2500; // 手動切換後，延遲多久再恢復自動播放
 
 /* 工具 */
 const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
@@ -198,6 +199,7 @@ function flashToast(text){
   s1.style.setProperty('--trans', TRANSITION_MS+'ms');
 
   let cur=0, showA=true, playing=true;
+  let timerId = null, restartId = null;
 
   async function show(idx){
     const ph = photos[idx];
@@ -222,13 +224,26 @@ function flashToast(text){
   function next(){ cur = (cur+1)%photos.length; show(cur); }
   function prev(){ cur = (cur-1+photos.length)%photos.length; show(cur); }
 
+  function startInterval(delay = 0){
+    clearInterval(timerId);
+    clearTimeout(restartId);
+    if (!playing) return;
+    if (delay > 0){
+      restartId = setTimeout(()=>{ timerId = setInterval(next, INTERVAL_MS); }, delay);
+    }else{
+      timerId = setInterval(next, INTERVAL_MS);
+    }
+  }
+  function deferAuto(){ if (playing) startInterval(MANUAL_GRACE_MS); }
+
   await show(0);
-  let timerId = setInterval(next, INTERVAL_MS);
+  startInterval(); // 立刻開始自動播放
 
   function play(p){
     playing = p;
     clearInterval(timerId);
-    if(playing) timerId = setInterval(next, INTERVAL_MS);
+    clearTimeout(restartId);
+    if(playing) startInterval(); // 重新開始（不延遲）
   }
 
   /* 點一下：暫停／播放（防滑動後幽靈點擊） */
@@ -236,10 +251,10 @@ function flashToast(text){
   document.addEventListener('click', () => {
     if (Date.now() < suppressClickUntil) return;
     play(!playing);
-    flashToast(playing ? "播放" : "暫停");     // 沒有任何 emoji
+    flashToast(playing ? "播放" : "暫停");
   });
 
-  /* 左右滑動切換，並抑制滑動後的 click */
+  /* 左右滑動切換，並抑制滑動後的 click；手動後延遲自動播放 */
   let touchX = null;
   document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, {passive:true});
   document.addEventListener('touchend',   e => {
@@ -248,19 +263,18 @@ function flashToast(text){
     touchX = null;
     if (Math.abs(dx) > 40) {
       (dx < 0 ? next() : prev());
+      deferAuto();                                // 手動後延遲自動播放
       suppressClickUntil = Date.now() + 350;
     }
   }, {passive:true});
 
-  /* 桌面鍵盤 */
+  /* 桌面鍵盤：手動後延遲自動播放 */
   document.addEventListener('keydown', e=>{
     if(e.code==='Space'){ e.preventDefault(); play(!playing); flashToast(playing ? "播放" : "暫停"); }
-    else if(e.key==='ArrowRight'){ next(); }
-    else if(e.key==='ArrowLeft'){  prev(); }
+    else if(e.key==='ArrowRight'){ next(); deferAuto(); }
+    else if(e.key==='ArrowLeft'){  prev(); deferAuto(); }
   });
 })();
 </script>
 </body>
 </html>
-
-
