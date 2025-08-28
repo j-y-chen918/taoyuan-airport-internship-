@@ -2,59 +2,101 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>桃園機場｜實習相簿</title>
 
-<!-- 字體：Noto Sans TC -->
+<!-- 字體：Noto Sans TC（清楚、適合手機） -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
 
 <style>
   :root{
-    --bg:#0b0f14; --fg:#e8f0ff; --brand:#00c2ff; --muted:#94a3b8;
-    --brand-size:22px; --hint-size:13px; --cap-size:20px; --wm-size:18px;
-    --trans:800ms;
+    /* 顏色 */
+    --bg:#0b0f14; --fg:#e8f0ff; --brand:#00c2ff; --muted:#9aa4b2;
+    /* 手機優先的字級，桌面再放大 */
+    --title-size: clamp(16px, 5.5vw, 28px);   /* 第一行大字 */
+    --hint-size:  clamp(11px, 3.6vw, 14px);   /* 第二行小字 */
+    --cap-size:   clamp(13px, 3.8vw, 18px);   /* 左下字幕 */
+    --wm-size:    clamp(12px, 3.5vw, 18px);   /* 右下水印（小螢幕自動隱藏） */
+    --top-pad: calc(env(safe-area-inset-top, 0px) + 10px);
+    --side-pad: calc(env(safe-area-inset-left, 0px) + 12px);
+    --trans: 800ms;                           /* 照片淡入時間 */
   }
+
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg)}
   body{font-family:"Noto Sans TC",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,"PingFang TC","Microsoft JhengHei",sans-serif}
 
-  .chrome{position:fixed;inset:0 0 auto 0;height:56px;display:flex;align-items:center;justify-content:space-between;
-          padding:0 18px;background:linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,0));z-index:10}
-  .brand{font-weight:900;letter-spacing:.4px;font-size:var(--brand-size)}
-  .brand b{color:var(--brand)}
-  .hint{color:#9aa4b2;font-size:var(--hint-size)}
+  /* 頂部兩行抬頭（固定在上） */
+  .topbar{
+    position:fixed;left:0;right:0;top:0;z-index:10;
+    padding: var(--top-pad) var(--side-pad) 8px var(--side-pad);
+    background: linear-gradient(180deg, rgba(0,0,0,.68), rgba(0,0,0,0));
+  }
+  .title{
+    font-weight:900;font-size:var(--title-size);line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    text-shadow: 0 1px 2px rgba(0,0,0,.35);
+  }
+  .title b{ color:var(--brand); }
+  .hint{
+    margin-top:6px;color:var(--muted);font-size:var(--hint-size);line-height:1.2;
+    text-shadow: 0 1px 1px rgba(0,0,0,.3);
+  }
 
+  /* 舞台區：圖片置中顯示 */
   .stage{position:fixed;inset:0;display:grid;place-items:center}
   .wrap{position:relative;width:100%;height:100%}
   .slide{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transition:opacity var(--trans) ease}
   .slide.show{opacity:1}
   img.photo{max-width:100%;max-height:100%;object-fit:contain;image-rendering:auto}
 
-  .caption{position:fixed;left:16px;bottom:14px;color:var(--muted);font-size:var(--cap-size)}
-  .wm{position:fixed;right:16px;bottom:12px;color:var(--brand);font-weight:900;font-size:var(--wm-size)}
+  /* 左下字幕（編號｜名稱） */
+  .caption{
+    position:fixed;left:var(--side-pad);
+    bottom:calc(env(safe-area-inset-bottom, 0px) + 10px);
+    color:var(--muted);font-size:var(--cap-size);
+    text-shadow: 0 1px 2px rgba(0,0,0,.35);
+    z-index:10;
+  }
   .cap-in{animation:capIn .5s ease both}
-  @keyframes capIn{from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)}}
+  @keyframes capIn{from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)}}
+
+  /* 右下水印（小螢幕自動隱藏） */
+  .wm{
+    position:fixed;right:var(--side-pad);
+    bottom:calc(env(safe-area-inset-bottom, 0px) + 10px);
+    color:var(--brand);font-weight:900;font-size:var(--wm-size);z-index:10;
+    text-shadow:0 1px 2px rgba(0,0,0,.35);
+  }
+  @media (max-width: 480px) { .wm{ display:none; } } /* 會擋到就自動隱藏 */
+
+  /* 動效無障礙：若使用者偏好減少動態，就關閉動畫 */
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none !important; }
+    .cap-in { animation: none !important; }
+  }
 </style>
 </head>
 <body>
-  <div class="chrome">
-    <div class="brand" id="brandL">桃園機場 <b>TIAC</b>｜實習相簿</div>
-    <div class="hint"  id="hint">點擊/空白鍵：暫停‧繼續　←/→：上一張/下一張</div>
+  <!-- 手機優先的兩行抬頭 -->
+  <div class="topbar">
+    <div class="title">桃園機場 <b>TIAC</b>｜114實習相簿</div>
+    <div class="hint">左右滑動或點按：上一張／下一張　·　點一下：暫停／播放</div>
   </div>
 
   <div class="stage"><div class="wrap" id="wrap">
-    <div class="slide" id="s0"><img class="photo" /></div>
-    <div class="slide" id="s1"><img class="photo" /></div>
+    <!-- 交替淡入用的雙層 -->
+    <div class="slide" id="s0"><img class="photo" alt=""></div>
+    <div class="slide" id="s1"><img class="photo" alt=""></div>
   </div></div>
 
   <div class="caption" id="cap"></div>
   <div class="wm" id="wm">= 2025 SUMMER =</div>
 
 <script>
-/* 參數 */
+/* 參數（保留你的設定） */
 const MAX_SCAN = 200;
-const EXTS = ['jpg','jpeg','png','webp'];
+const EXTS = ['jpg','jpeg','png','webp','JPG','JPEG','PNG','WEBP']; // 大小寫都支援
 const INTERVAL_MS = 3600;
 const TRANSITION_MS = 800;
 const TYPE_MS_PER_CHAR = 18;
@@ -71,7 +113,7 @@ function preloadOk(url){
   });
 }
 
-/* 讀 photos.txt（容錯：trim、BOM、允許 "檔名 | 標題"）*/
+/* 讀 photos.txt（容錯：trim、BOM、允許「檔名 | 標題」與標題內含 |） */
 async function listFromTxt(){
   try{
     const r = await fetch('photos/photos.txt',{cache:'no-store'});
@@ -81,21 +123,18 @@ async function listFromTxt(){
     const list = rows.map(line=>{
       const [nameRaw, ...rest] = line.split('|');
       const name = (nameRaw||'').replace(/^\uFEFF/,'').trim();
-      const titleRaw = rest.join('|').trim(); // 允許標題含 |
+      const titleRaw = rest.join('|').trim();
       const src = `photos/${name}`;
       const title = (titleRaw || name).replace(/\.(jpe?g|png|webp)$/i,'');
       return {src, title};
     });
-    // 驗證實際可載入
     const ok = [];
-    for(const it of list){
-      if(await preloadOk(it.src)) ok.push(it);
-    }
+    for(const it of list){ if(await preloadOk(it.src)) ok.push(it); }
     return ok;
   }catch{ return []; }
 }
 
-/* 連號掃描後再驗證 */
+/* 連號掃描（不中斷，遇缺號照掃到 MAX_SCAN） */
 async function listFromScan(){
   const out=[];
   for(let i=1;i<=MAX_SCAN;i++){
@@ -105,13 +144,12 @@ async function listFromScan(){
       const url = `photos/${num}.${ext}`;
       if(await preloadOk(url)){ hit=url; break; }
     }
-    if(!hit) break;
-    out.push({src:hit, title:num});
+    if(hit){ out.push({src:hit, title:num}); }
   }
   return out;
 }
 
-/* 取得清單：先 txt → 全空才掃描 */
+/* 取得清單：先 txt（有就用）→ 否則掃描 */
 async function getPhotos(){
   if(USE_PHOTOS_TXT){
     const a = await listFromTxt();
@@ -120,7 +158,7 @@ async function getPhotos(){
   return await listFromScan();
 }
 
-/* 字幕（001｜標題）＋打字動畫 */
+/* 左下字幕（001｜名稱）＋打字動畫 */
 let capToken = 0;
 function setCaption(idx, title){
   const cap = document.getElementById('cap');
@@ -136,7 +174,7 @@ function setCaption(idx, title){
 (async function main(){
   const photos = await getPhotos();
   if(!photos.length){
-    document.body.innerHTML = "<div style='color:#fff;padding:32px'>找不到任何照片（請在 <code>photos/</code> 放 001.jpg、002.jpg… 或在 <code>photos/photos.txt</code> 每行寫 <code>檔名|字幕</code>）</div>";
+    document.body.innerHTML = "<div style='color:#fff;padding:calc(var(--top-pad) + 40px) var(--side-pad)'>找不到任何照片（請在 <code>photos/</code> 放 001.jpg、002.jpg… 或在 <code>photos/photos.txt</code> 每行寫 <code>檔名|字幕</code>）</div>";
     return;
   }
 
@@ -173,15 +211,32 @@ function setCaption(idx, title){
   function prev(){ cur = (cur-1+photos.length)%photos.length; show(cur); }
 
   await show(0);
-  timer = setInterval(next, INTERVAL_MS);
+  let timerId = setInterval(next, INTERVAL_MS);
 
-  function play(p){ playing=p; if(playing){ timer=setInterval(next,INTERVAL_MS);} else{ clearInterval(timer);} }
+  /* 播放/暫停：確保不重複開 interval */
+  function play(p){
+    playing = p;
+    clearInterval(timerId);
+    if(playing) timerId = setInterval(next, INTERVAL_MS);
+  }
+
+  /* 點擊切換播放；鍵盤左右切換（桌面） */
   document.addEventListener('click', ()=>play(!playing));
   document.addEventListener('keydown', e=>{
     if(e.code==='Space'){ e.preventDefault(); play(!playing); }
     else if(e.key==='ArrowRight'){ next(); }
     else if(e.key==='ArrowLeft'){ prev(); }
   });
+
+  /* 手機左右滑動切換 */
+  let touchX = null;
+  document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend',   e => {
+    if (touchX == null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    touchX = null;
+    if (Math.abs(dx) > 40) (dx < 0 ? next() : prev());
+  }, {passive:true});
 })();
 </script>
 </body>
