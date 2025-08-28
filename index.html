@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>桃園機場｜114實習相簿</title>
+<title>桃園機場｜實習相簿</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,23 +38,6 @@
     text-shadow: 0 1px 1px rgba(0,0,0,.3);
   }
 
-  /* 狀態指示器（右上角） */
-  .status{
-    position:fixed; top:var(--top-pad); right:var(--side-pad); z-index:11;
-    display:flex; align-items:center; gap:8px; color:var(--muted); font-size:var(--hint-size);
-    text-shadow:0 1px 1px rgba(0,0,0,.3);
-    user-select:none; pointer-events:none;
-  }
-  .bars{display:flex; align-items:flex-end; gap:2px; height:12px;}
-  .bar{ width:3px; height:10px; background:var(--brand); opacity:.95; transform-origin:bottom; animation:eq 1s ease-in-out infinite; }
-  .bar:nth-child(2){animation-delay:.15s}
-  .bar:nth-child(3){animation-delay:.30s}
-  @keyframes eq{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
-  .paused .bar{ animation:none; opacity:.35 }
-  .status .label{font-weight:700; letter-spacing:.3px}
-  .playing .label::before{ content:"▶ 播放中"; }
-  .paused  .label::before{ content:"⏸ 已暫停"; }
-
   /* 舞台區 */
   .stage{position:fixed;inset:0;display:grid;place-items:center}
   .wrap{position:relative;width:100%;height:100%}
@@ -82,7 +65,7 @@
   }
   @media (max-width: 480px) { .wm{ display:none; } }
 
-  /* 中央瞬間提示（播放/暫停） */
+  /* 中央瞬間提示（播放/暫停）— 純文字 */
   .toast{
     pointer-events:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%) scale(.9);
     background:rgba(0,0,0,.55); color:var(--fg); padding:10px 14px; border-radius:999px; font-weight:900;
@@ -99,7 +82,6 @@
   @media (prefers-reduced-motion: reduce) {
     .slide { transition: none !important; }
     .cap-in { animation: none !important; }
-    .bars .bar{ animation:none !important; }
     .toast.show{ animation:none !important; opacity:1; }
   }
 </style>
@@ -108,12 +90,6 @@
   <div class="topbar">
     <div class="title">桃園機場 <b>TIAC</b>｜114實習相簿</div>
     <div class="hint">左右滑動：上一張／下一張　·　點一下：暫停／播放</div>
-  </div>
-
-  <!-- 播放狀態指示器 -->
-  <div id="status" class="status playing">
-    <div class="bars"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
-    <span class="label"></span>
   </div>
 
   <div class="stage"><div class="wrap" id="wrap">
@@ -201,16 +177,11 @@ function setCaption(idx, title){
   })();
 }
 
-/* 狀態 UI */
-const statusEl = document.getElementById('status');
+/* 中央提示 */
 const toastEl  = document.getElementById('toast');
-function updateStatus(playing){
-  statusEl.classList.toggle('playing', playing);
-  statusEl.classList.toggle('paused',  !playing);
-}
 function flashToast(text){
-  toastEl.textContent = text;
-  toastEl.classList.remove('show'); void toastEl.offsetWidth; // restart
+  toastEl.textContent = text;                     // 純文字「播放 / 暫停」
+  toastEl.classList.remove('show'); void toastEl.offsetWidth;
   toastEl.classList.add('show');
   setTimeout(()=>toastEl.classList.remove('show'), 900);
 }
@@ -253,13 +224,11 @@ function flashToast(text){
 
   await show(0);
   let timerId = setInterval(next, INTERVAL_MS);
-  updateStatus(true);
 
   function play(p){
     playing = p;
     clearInterval(timerId);
     if(playing) timerId = setInterval(next, INTERVAL_MS);
-    updateStatus(playing);
   }
 
   /* 點一下：暫停／播放（防滑動後幽靈點擊） */
@@ -267,7 +236,7 @@ function flashToast(text){
   document.addEventListener('click', () => {
     if (Date.now() < suppressClickUntil) return;
     play(!playing);
-    flashToast(playing ? "▶ 播放" : "⏸ 暫停");
+    flashToast(playing ? "播放" : "暫停");     // 沒有任何 emoji
   });
 
   /* 左右滑動切換，並抑制滑動後的 click */
@@ -285,7 +254,7 @@ function flashToast(text){
 
   /* 桌面鍵盤 */
   document.addEventListener('keydown', e=>{
-    if(e.code==='Space'){ e.preventDefault(); play(!playing); flashToast(playing ? "▶ 播放" : "⏸ 暫停"); }
+    if(e.code==='Space'){ e.preventDefault(); play(!playing); flashToast(playing ? "播放" : "暫停"); }
     else if(e.key==='ArrowRight'){ next(); }
     else if(e.key==='ArrowLeft'){  prev(); }
   });
