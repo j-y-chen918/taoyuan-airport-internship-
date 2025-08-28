@@ -14,7 +14,7 @@
     --bg:#0b0f14; --fg:#e8f0ff; --brand:#00c2ff; --muted:#9aa4b2;
     --title-size: clamp(16px, 5.5vw, 28px);
     --hint-size:  clamp(11px, 3.6vw, 14px);
-    --cap-size:   clamp(13px, 3.8vw, 18px);
+    --cap-size:   clamp(16px, 5.0vw, 24px); /* 放大字幕 */
     --wm-size:    clamp(12px, 3.5vw, 18px);
     --top-pad: calc(env(safe-area-inset-top, 0px) + 10px);
     --side-pad: calc(env(safe-area-inset-left, 0px) + 12px);
@@ -27,7 +27,9 @@
     position:fixed;left:0;right:0;top:0;z-index:10;
     padding: var(--top-pad) var(--side-pad) 8px var(--side-pad);
     background: linear-gradient(180deg, rgba(0,0,0,.68), rgba(0,0,0,0));
+    display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
   }
+  .titwrap{min-width:0}
   .title{
     font-weight:900;font-size:var(--title-size);line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
     text-shadow: 0 1px 2px rgba(0,0,0,.35);
@@ -38,6 +40,22 @@
     text-shadow: 0 1px 1px rgba(0,0,0,.3);
   }
 
+  /* 控制鈕（隨機／循環） */
+  .controls{ display:flex; gap:8px; padding-top:2px; }
+  .btn{
+    -webkit-tap-highlight-color: transparent;
+    border:1px solid rgba(255,255,255,.25);
+    background:rgba(0,0,0,.35);
+    color:var(--fg);
+    padding:6px 10px; border-radius:999px; font-size:clamp(12px,3.6vw,14px);
+    font-weight:700; letter-spacing:.3px;
+  }
+  .btn.on{
+    border-color:transparent;
+    background: linear-gradient(180deg, rgba(0,194,255,.9), rgba(0,194,255,.65));
+    color:#00131a;
+  }
+
   /* 舞台區 */
   .stage{position:fixed;inset:0;display:grid;place-items:center}
   .wrap{position:relative;width:100%;height:100%}
@@ -45,12 +63,12 @@
   .slide.show{opacity:1}
   img.photo{max-width:100%;max-height:100%;object-fit:contain;image-rendering:auto}
 
-  /* 左下字幕 */
+  /* 左下字幕（放大後保持陰影） */
   .caption{
     position:fixed;left:var(--side-pad);
     bottom:calc(env(safe-area-inset-bottom, 0px) + 10px);
     color:var(--muted);font-size:var(--cap-size);
-    text-shadow: 0 1px 2px rgba(0,0,0,.35);
+    text-shadow: 0 2px 3px rgba(0,0,0,.45);
     z-index:10;
   }
   .cap-in{animation:capIn .5s ease both}
@@ -88,8 +106,14 @@
 </head>
 <body>
   <div class="topbar">
-    <div class="title">桃園機場 <b>TIAC</b>｜114實習相簿</div>
-    <div class="hint">左右滑動：上一張／下一張　點一下：暫停／播放</div>
+    <div class="titwrap">
+      <div class="title">桃園機場 <b>TIAC</b>｜114實習相簿</div>
+      <div class="hint">左右滑動：上一張／下一張　點一下：暫停／播放</div>
+    </div>
+    <div class="controls" id="controls">
+      <button id="btnShuffle" class="btn" type="button">隨機</button>
+      <button id="btnLoop" class="btn on" type="button">循環</button>
+    </div>
   </div>
 
   <div class="stage"><div class="wrap" id="wrap">
@@ -120,6 +144,10 @@ function preloadOk(url){
     img.onerror = ()=>res(false);
     img.src = url + (url.includes('?')?'&':'?') + 't=' + Date.now();
   });
+}
+function shuffleInPlace(a){
+  for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
 }
 
 /* photos.txt */
@@ -167,9 +195,9 @@ async function getPhotos(){
 
 /* 字幕動畫 */
 let capToken = 0;
-function setCaption(idx, title){
+function setCaption(photoIndex, title){
   const cap = document.getElementById('cap');
-  const n = String(idx+1).padStart(3,'0');
+  const n = String(photoIndex+1).padStart(3,'0'); // 以實際照片索引編號
   const text = `${n}｜${title||''}`;
   cap.classList.remove('cap-in'); void cap.offsetWidth; cap.classList.add('cap-in');
   const my = ++capToken; cap.textContent=''; let i=0;
@@ -181,7 +209,7 @@ function setCaption(idx, title){
 /* 中央提示 */
 const toastEl  = document.getElementById('toast');
 function flashToast(text){
-  toastEl.textContent = text;                     // 純文字「播放 / 暫停」
+  toastEl.textContent = text;
   toastEl.classList.remove('show'); void toastEl.offsetWidth;
   toastEl.classList.add('show');
   setTimeout(()=>toastEl.classList.remove('show'), 900);
@@ -198,31 +226,75 @@ function flashToast(text){
   s0.style.setProperty('--trans', TRANSITION_MS+'ms');
   s1.style.setProperty('--trans', TRANSITION_MS+'ms');
 
-  let cur=0, showA=true, playing=true;
+  /* 播放狀態與順序管理 */
+  let playing = true;
   let timerId = null, restartId = null;
+  let shuffleOn = false;
+  let loopOn = true;
 
-  async function show(idx){
-    const ph = photos[idx];
-    const target = showA ? s1 : s0;
+  // 播放順序：order[] 放的是照片索引(0..n-1)，pos 是目前在 order 中的位置
+  let order = Array.from({length: photos.length}, (_,i)=>i);
+  let pos = 0;
+
+  function rebuildOrder(keepIndex, shuffle){
+    if (shuffle){
+      const rest = Array.from({length: photos.length}, (_,i)=>i).filter(i=>i!==keepIndex);
+      shuffleInPlace(rest);
+      order = [keepIndex, ...rest];
+      pos = 0;
+    }else{
+      order = Array.from({length: photos.length}, (_,i)=>i);
+      pos = keepIndex; // 讓目前這張位置對應同一張
+    }
+  }
+
+  async function showAt(p){
+    pos = p;
+    const idx = order[pos];
+    const target = (pos % 2 === 0) ? s1 : s0; // 交錯使用兩層避免閃爍
     const img = target.querySelector('img');
+    const ph = photos[idx];
 
     if(!(await preloadOk(ph.src))){
-      cur = (cur+1)%photos.length;
-      await show(cur);
-      return;
+      // 失敗就嘗試下一張
+      if (pos < order.length-1) return showAt(pos+1);
+      else return; // 全部都失敗就不動
     }
     img.src = ph.src;
     setCaption(idx, ph.title);
 
-    (showA ? s0 : s1).classList.remove('show');
+    ( (pos % 2 === 0) ? s0 : s1 ).classList.remove('show');
     target.classList.add('show');
-    showA = !showA;
 
-    const nextIdx = (idx+1)%photos.length;
-    preloadOk(photos[nextIdx].src);
+    // 預載下一張
+    const nextPos = (pos+1 < order.length) ? pos+1 : 0;
+    preloadOk(photos[ order[nextPos] ].src);
   }
-  function next(){ cur = (cur+1)%photos.length; show(cur); }
-  function prev(){ cur = (cur-1+photos.length)%photos.length; show(cur); }
+
+  function next(){
+    if (pos < order.length - 1){
+      showAt(pos + 1);
+    }else{
+      if (loopOn){
+        showAt(0);
+      }else{
+        flashToast("已到最後一張");
+        playing = false;
+        clearInterval(timerId); clearTimeout(restartId);
+      }
+    }
+  }
+  function prev(){
+    if (pos > 0){
+      showAt(pos - 1);
+    }else{
+      if (loopOn){
+        showAt(order.length - 1);
+      }else{
+        flashToast("已到第一張");
+      }
+    }
+  }
 
   function startInterval(delay = 0){
     clearInterval(timerId);
@@ -236,19 +308,20 @@ function flashToast(text){
   }
   function deferAuto(){ if (playing) startInterval(MANUAL_GRACE_MS); }
 
-  await show(0);
-  startInterval(); // 立刻開始自動播放
+  await showAt(0);
+  startInterval(); // 開始自動播放
 
   function play(p){
     playing = p;
     clearInterval(timerId);
     clearTimeout(restartId);
-    if(playing) startInterval(); // 重新開始（不延遲）
+    if(playing) startInterval(); // 立即恢復
   }
 
-  /* 點一下：暫停／播放（防滑動後幽靈點擊） */
+  /* 點一下：暫停／播放（防滑動後幽靈點擊；點在 topbar/controls 不觸發） */
   let suppressClickUntil = 0;
-  document.addEventListener('click', () => {
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.topbar')) return; // 點到標題/提示/按鈕時，不做全畫面切換
     if (Date.now() < suppressClickUntil) return;
     play(!playing);
     flashToast(playing ? "播放" : "暫停");
@@ -263,7 +336,7 @@ function flashToast(text){
     touchX = null;
     if (Math.abs(dx) > 40) {
       (dx < 0 ? next() : prev());
-      deferAuto();                                // 手動後延遲自動播放
+      deferAuto();
       suppressClickUntil = Date.now() + 350;
     }
   }, {passive:true});
@@ -274,6 +347,35 @@ function flashToast(text){
     else if(e.key==='ArrowRight'){ next(); deferAuto(); }
     else if(e.key==='ArrowLeft'){  prev(); deferAuto(); }
   });
+
+  /* 隨機／循環按鈕 */
+  const btnShuffle = document.getElementById('btnShuffle');
+  const btnLoop    = document.getElementById('btnLoop');
+
+  function updateButtons(){
+    btnShuffle.classList.toggle('on', shuffleOn);
+    btnLoop.classList.toggle('on', loopOn);
+  }
+
+  btnShuffle.addEventListener('click', (e)=>{
+    e.stopPropagation(); // 不要觸發全畫面點擊
+    const currentIdx = order[pos];
+    shuffleOn = !shuffleOn;
+    rebuildOrder(currentIdx, shuffleOn); // 重新建立順序，但保留目前這張
+    updateButtons();
+    flashToast(`隨機：${shuffleOn ? "開" : "關"}`);
+    deferAuto();
+  });
+
+  btnLoop.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    loopOn = !loopOn;
+    updateButtons();
+    flashToast(`循環：${loopOn ? "開" : "關"}`);
+    deferAuto();
+  });
+
+  updateButtons();
 })();
 </script>
 </body>
