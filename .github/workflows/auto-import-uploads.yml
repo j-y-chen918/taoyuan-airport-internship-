@@ -1,0 +1,152 @@
+name: Auto import photos from issues
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: write   # 允許寫入 repo
+  issues: write     # 允許回覆/關閉 issue
+
+jobs:
+  import:
+    if: contains(join(github.event.issue.labels.*.name, ','), 'auto-upload')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run importer (download images, auto-number, update photos.txt)
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const body = process.env.ISSUE_BODY || '';
+          const photosDir = path.join(process.cwd(), 'photos');
+          if (!fs.existsSync(photosDir)) fs.mkdirSync(photosDir, { recursive: true });
+
+          // 解析 issue 內的圖片與 alt（標題）
+          const imgRe = /!\[([^\]]*)\]\((https?:\/\/user-images\.githubusercontent\.com\/[^\s)]+)\)/g;
+          let m, items = [];
+          while ((m = imgRe.exec(body)) !== null) {
+            const alt = (m[1] || '').trim();
+            const url = m[2];
+            items.push({ url, alt });
+          }
+          if (items.length === 0) {
+            console.log('No user-images links found in issue body.');
+            process.exit(0);
+          }
+
+          // 找目前最大編號（NNN）
+          const exts = ['.jpg','.jpeg','.png','.webp'];
+          let maxN = 0;
+          for (const f of (fs.existsSync(photosDir) ? fs.readdirSync(photosDir) : [])) {
+            const ext = path.extname(f).toLowerCase();
+            if (!exts.includes(ext)) continue;
+            const base = path.basename(f, ext);
+            if (/^\d{3}$/.test(base)) {
+              const n = parseInt(base, 10);
+              if (n > maxN) maxN = n;
+            }
+          }
+
+          const allowed = new Set(['jpg','jpeg','png','webp','JPG','JPEG','PNG','WEBP']);
+          const guessExt = (u, ct) => {
+            const fromUrl = path.extname(new URL(u).pathname).replace('.', '');
+            if (allowed.has(fromUrl)) return '.'+fromUrl.toLowerCase();
+            if (ct) {
+              if (ct.includes('png')) return '.png';
+              if (ct.includes('webp')) return '.webp';
+              if (ct.includes('jpeg') || ct.includes('jpg')) return '.jpg';
+            }
+            return '.jpg';
+          };
+
+          const fetch = global.fetch || ((...args)=>import('node-fetch').then(({default: f})=>f(...args)));
+
+          let appended = [];
+          (async () => {
+            for (const it of items) {
+              maxN += 1;
+              const num = String(maxN).padStart(3, '0');
+
+              const resp = await fetch(it.url);
+              if (!resp.ok) {
+                console.error('Fetch failed:', it.url, resp.status);
+                maxN -= 1;
+                continue;
+              }
+              const ct = resp.headers.get('content-type') || '';
+              const buf = Buffer.from(await resp.arrayBuffer());
+              const ext = guessExt(it.url, ct);
+              const filename = `${num}${ext}`;
+              const filepath = path.join(photosDir, filename);
+              fs.writeFileSync(filepath, buf);
+              const title = (it.alt || filename.replace(/\.(jpe?g|png|webp)$/i, ''));
+              appended.push({ filename, title });
+            }
+
+            if (appended.length === 0) {
+              console.log('Nothing appended.');
+              return;
+            }
+
+            const txtPath = path.join(photosDir, 'photos.txt');
+            let orig = '';
+            if (fs.existsSync(txtPath)) {
+              orig = fs.readFileSync(txtPath, 'utf8').replace(/^\uFEFF/, '');
+            }
+            const lines = appended.map(x => `${x.filename}|${x.title}`);
+            const out = (orig ? orig.replace(/\s*$/,'') + '\n' : '') + lines.join('\n') + '\n';
+            fs.writeFileSync(txtPath, out, 'utf8');
+
+            fs.writeFileSync('.upload-added.json', JSON.stringify(appended, null, 2));
+          })().catch(err => { console.error(err); process.exit(1); });
+          NODE
+
+          if git status --porcelain | grep -q '.'; then
+            git add photos/*
+            git commit -m "auto: import photos from issue #${{ github.event.issue.number }}"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+
+      - name: Comment & close issue
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let list = [];
+            try { list = JSON.parse(fs.readFileSync('.upload-added.json','utf8')); } catch {}
+            const lines = list.map(x=>`- \`${x.filename}\`｜${x.title}`).join('\n') || '(沒有新增檔案)';
+            const body = [
+              '✅ 已匯入下列照片並更新相簿：',
+              '',
+              lines,
+              '',
+              '— 自動匯入機器人'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed'
+            });
