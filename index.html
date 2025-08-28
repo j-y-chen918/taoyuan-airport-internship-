@@ -2,145 +2,134 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8" />
-<title>桃園機場｜114實習生</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>桃園機場｜實習相簿</title>
 <style>
   :root{ --bg:#0b0f14; --fg:#e8f0ff; --brand:#00c2ff; --muted:#94a3b8 }
-  html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
-  .chrome{position:fixed;left:0;right:0;top:0;height:56px;display:flex;align-items:center;justify-content:space-between;
-          padding:0 18px;background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,0));z-index:20}
-  .brand{font-weight:800;letter-spacing:.5px}.brand b{color:var(--brand)}
-  .caption{position:fixed;left:24px;bottom:18px;color:var(--muted);font-size:14px;z-index:20}
-  .wm{position:fixed;right:24px;bottom:16px;color:var(--brand);font-weight:800;letter-spacing:.4px;z-index:20}
-  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
-  .slide{position:absolute;inset:64px 24px 24px 24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .6s ease}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui}
+  .chrome{position:fixed;inset:0 0 auto 0;height:56px;display:flex;align-items:center;justify-content:space-between;
+          padding:0 18px;background:linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,0));z-index:10}
+  .brand{font-weight:800;letter-spacing:.4px}.brand b{color:var(--brand)}
+  .stage{position:fixed;inset:0;display:grid;place-items:center}
+  .wrap{position:relative;width:100%;height:100%}
+  .slide{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transition:opacity var(--t,800ms) ease}
   .slide.show{opacity:1}
-  .ascii{white-space:pre;font-variant-ligatures:none;line-height:8px}
-  .row{display:block}.cell{display:inline-block;width:1em}
+  img.photo{max-width:100%;max-height:100%;object-fit:contain;image-rendering:auto}
+  .caption{position:fixed;left:16px;bottom:14px;color:var(--muted);font-size:14px}
+  .wm{position:fixed;right:16px;bottom:12px;color:var(--brand);font-weight:800}
+  .hint{position:fixed;right:16px;top:12px;color:#9aa4b2;font-size:12px}
 </style>
 </head>
 <body>
   <div class="chrome">
-    <div class="brand">桃園機場 <b>TIAC</b>｜實習相簿</div>
-    <div class="brand" style="font-weight:600;color:var(--muted)">你們好吵</div>
+    <div class="brand" id="brandL"></div>
+    <div class="hint" id="hint"></div>
   </div>
-  <div class="stage" id="stage"></div>
-  <div class="caption" id="caption"></div>
-  <div class="wm">= 2025 SUMMER = </div>
+  <div class="stage"><div class="wrap" id="wrap">
+    <!-- 交替淡入用的雙層 -->
+    <div class="slide" id="s0"><img class="photo" /></div>
+    <div class="slide" id="s1"><img class="photo" /></div>
+  </div></div>
+  <div class="caption" id="cap"></div>
+  <div class="wm" id="wm"></div>
 
 <script>
-/* 參數（可微調） */
-const SHADE_SET="@%#*+=-:. ";
-const EDGE_SET ="-|/\\";
-const EDGE_GAIN=1.4;
-const CELL=10, HOLD_MS=2200, STEP=800, DELAY_MS=2, MODE="random";
-const MAX_SCAN=200;  // 會掃描 photos/001..200
+/* === 你之後要改字，只改這裡就好 === */
+const TEXT = {
+  BRAND_LEFT: '桃園機場 <b>ICT</b>｜實習相簿',   // 左上抬頭（支援 <b>）
+  HINT: '點擊/空白鍵：暫停‧繼續　←/→：上一張/下一張', // 右上提示
+  WATERMARK: '資通處 ICT Dept.'                   // 右下角浮水印
+};
+/* === 幻燈片參數（可微調） === */
+const MAX_SCAN = 200;                 // 掃描 photos/001..200
+const EXTS = ['jpg','jpeg','png','webp'];
+const INTERVAL_MS = 3200;             // 每張停留時間
+const TRANSITION_MS = 800;            // 交替淡入時間
+const CAPTION_FROM_NAME = true;       // true：用檔名或 photos.txt 右側標題
+/* === 可選：使用 photos.txt（每行一筆）
+   格式一：001.jpg
+   格式二：001.jpg|見面會（檔名|字幕）  === */
 
-/* 依序掃描 photos/001..MAX_SCAN.(jpg|jpeg|png|webp) */
-async function autoPhotos(){
-  const exts = ['jpg','jpeg','png','webp'];
-  const exists = (p)=>fetch(p,{method:'HEAD',cache:'no-store'}).then(r=>r.ok).catch(()=>false);
-  const out=[];
-  for (let i=1;i<=MAX_SCAN;i++){
-    const num = String(i).padStart(3,'0');
-    let hit=null;
-    for (const ext of exts){
-      const p=`photos/${num}.${ext}`;
-      if (await exists(p)) { hit=p; break; }
+document.getElementById('brandL').innerHTML = TEXT.BRAND_LEFT;
+document.getElementById('hint').textContent = TEXT.HINT;
+document.getElementById('wm').textContent = TEXT.WATERMARK;
+
+/* 讀 photos.txt → 否則掃描連號 001.. */
+async function getPhotos(){
+  try{
+    const r = await fetch('photos/photos.txt',{cache:'no-store'});
+    if(r.ok){
+      const txt = await r.text();
+      const list = txt.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(line=>{
+        const [name, titleRaw] = line.split('|');
+        const src = `photos/${name}`;
+        const title = (titleRaw ?? name).replace(/\.(jpe?g|png|webp)$/i,'');
+        return {src, title};
+      });
+      if(list.length) return list;
     }
-    if (!hit) break;                 // 中斷連號就停止
-    out.push({src:hit, title:num});  // 標題先用編號
+  }catch(e){}
+  const exists = p => fetch(p,{method:'HEAD',cache:'no-store'}).then(r=>r.ok).catch(()=>false);
+  const out=[];
+  for(let i=1;i<=MAX_SCAN;i++){
+    const num=String(i).padStart(3,'0'); let hit=null;
+    for(const ext of EXTS){ const p=`photos/${num}.${ext}`; if(await exists(p)){hit=p;break;} }
+    if(!hit) break;
+    out.push({src:hit, title:num});
   }
   return out;
 }
 
-function loadImage(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
-function sample(img,c){ const w=Math.max(1,Math.floor(img.width/c)), h=Math.max(1,Math.floor(img.height/c));
-  const cvs=document.createElement('canvas'); cvs.width=w; cvs.height=h;
-  const ctx=cvs.getContext('2d',{willReadFrequently:true}); ctx.drawImage(img,0,0,w,h);
-  return {w,h,data:ctx.getImageData(0,0,w,h).data}; }
-function sobel(gray,w,h){ const gx=[-1,0,1,-2,0,2,-1,0,1], gy=[-1,-2,-1,0,0,0,1,2,1];
-  const mag=new Float32Array(w*h), ang=new Float32Array(w*h), at=(x,y)=>gray[(y*w+x)];
-  for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){let sx=0,sy=0,k=0;
-    for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++,k++){const v=at(x+i,y+j);sx+=gx[k]*v;sy+=gy[k]*v;}
-    const m=Math.hypot(sx,sy); mag[y*w+x]=Math.min(255,m); ang[y*w+x]=Math.atan2(sy,sx);} }
-  return {mag,ang}; }
-function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}}
-
-async function makeSlide({src,title}){
-  const img = await loadImage(src);
-  const {w,h,data} = sample(img, CELL);
-  const gray = new Float32Array(w*h);
-  for (let i=0,j=0;i<data.length;i+=4,j++){ const r=data[i],g=data[i+1],b=data[i+2]; gray[j]=0.2126*r+0.7152*g+0.0722*b; }
-  const {mag, ang} = sobel(gray,w,h);
-
-  const chars = new Array(h);
-  for(let y=0;y<h;y++){ chars[y]=new Array(w);
-    for(let x=0;x<w;x++){
-      const idx=y*w+x, depth = 1 - gray[idx]/255;
-      const shadeIdx = clamp(Math.round(depth*(SHADE_SET.length-1)),0,SHADE_SET.length-1);
-      let ch = SHADE_SET[shadeIdx];
-      if (EDGE_GAIN>0){
-        const m=(mag[idx]/255)*EDGE_GAIN;
-        if (m>0.35){
-          const a=ang[idx], abs=Math.abs(a);
-          if (abs < Math.PI/8 || abs > 3*Math.PI/8) ch = EDGE_SET[0]||'-';
-          else if (Math.abs(abs-Math.PI/2) < Math.PI/8) ch = EDGE_SET[1]||'|';
-          else ch = a>0 ? (EDGE_SET[2]||'/') : (EDGE_SET[3]||'\\');
-        }
-      }
-      chars[y][x]=ch;
-    }
-  }
-
-  const slide = document.createElement('div'); slide.className='slide';
-  const pre = document.createElement('div'); pre.className='ascii'; slide.appendChild(pre);
-
-  const vw = window.innerWidth - 48, cols = w, charW=0.62;
-  const fs = Math.max(8, Math.min(16, Math.floor(vw/(cols*charW))));
-  const lh = Math.round(fs*0.66);
-  pre.style.fontSize = fs+'px'; pre.style.lineHeight = lh+'px';
-
-  for(let y=0;y<h;y++){ const row=document.createElement('div'); row.className='row';
-    for(let x=0;x<w;x++){ const sp=document.createElement('span'); sp.className='cell'; sp.textContent=' '; row.appendChild(sp); }
-    pre.appendChild(row);
-  }
-
-  const coords=[];
-  if (MODE==='line') for(let y=0;y<h;y++) for(let x=0;x<w;x++) coords.push([y,x]);
-  else if (MODE==='column') for(let x=0;x<w;x++) for(let y=0;y<h;y++) coords.push([y,x]);
-  else { for(let y=0;y<h;y++) for(let x=0;x<w;x++) coords.push([y,x]); if (MODE==='random') shuffle(coords); }
-
-  const rows=[...pre.children];
-  let i=0,last=0,timer=null;
-  function setCell(y,x){ rows[y].children[x].textContent = chars[y][x]; }
-  function animate(){ function tick(t){ if(!last) last=t;
-      if(t-last >= DELAY_MS){ const end=Math.min(i+STEP, coords.length);
-        for(;i<end;i++){ const [y,x]=coords[i]; setCell(y,x); } last=t; }
-      if(i<coords.length) timer=requestAnimationFrame(tick); }
-    timer=requestAnimationFrame(tick);
-    return new Promise(res=>{ const iv=setInterval(()=>{ if(i>=coords.length){ clearInterval(iv); res(); } },100); }); }
-
-  slide.play = async ()=>{ slide.classList.add('show'); document.getElementById('caption').textContent = title||''; await animate(); await new Promise(r=>setTimeout(r,HOLD_MS)); slide.classList.remove('show'); };
-  slide.detach = ()=> slide.remove();
-  document.getElementById('stage').appendChild(slide);
-  return slide;
-}
+function preload(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
 
 (async function main(){
-  const photos = await autoPhotos();
-  if (!photos.length){
-    document.body.innerHTML = "<div style='color:#fff;padding:32px'>找不到任何照片（請把圖片放在 <code>photos/</code>，並用 001.jpg、002.jpg… 連號；支援 jpg/jpeg/png/webp）</div>";
+  const photos = await getPhotos();
+  if(!photos.length){
+    document.body.innerHTML = "<div style='color:#fff;padding:32px'>找不到任何照片（請在 <code>photos/</code> 放 001.jpg、002.jpg… 或提供 <code>photos.txt</code>）</div>";
     return;
   }
-  const slides=[];
-  for (const p of photos){ try{ slides.push(await makeSlide(p)); }catch(e){ console.warn('載入失敗：', p.src); } }
-  let idx=0; while(true){ await slides[idx].play(); idx=(idx+1)%slides.length; }
+
+  // DOM
+  const cap = document.getElementById('cap');
+  const s0 = document.getElementById('s0'), s1 = document.getElementById('s1');
+  s0.style.setProperty('--t', TRANSITION_MS+'ms');
+  s1.style.setProperty('--t', TRANSITION_MS+'ms');
+  let cur=0, showA=true, playing=true, timer=null;
+
+  // 預載第一張與下一張
+  await preload(photos[0].src);
+  const nextIndex = (i)=> (i+1)%photos.length;
+
+  async function show(idx){
+    const ph = photos[idx];
+    const target = showA ? s1 : s0;            // 下一張放到隱藏層
+    const img = target.querySelector('img');
+    await preload(ph.src);
+    img.src = ph.src;
+    cap.textContent = CAPTION_FROM_NAME ? (ph.title||'') : '';
+    (showA ? s0 : s1).classList.remove('show');
+    target.classList.add('show');
+    showA = !showA;
+    // 預載下一張
+    preload(photos[nextIndex(idx)].src);
+  }
+
+  function next(){ cur = nextIndex(cur); show(cur); }
+  function prev(){ cur = (cur-1+photos.length)%photos.length; show(cur); }
+
+  // 初始顯示第一張
+  await show(0);
+  timer = setInterval(next, INTERVAL_MS);
+
+  // 控制：點擊/空白鍵暫停；左右切換
+  function play(p){ playing=p; if(playing){ timer=setInterval(next,INTERVAL_MS);} else{ clearInterval(timer);} }
+  document.addEventListener('click', ()=>play(!playing));
+  document.addEventListener('keydown', e=>{
+    if(e.code==='Space'){ e.preventDefault(); play(!playing); }
+    else if(e.key==='ArrowRight'){ next(); }
+    else if(e.key==='ArrowLeft'){ prev(); }
+  });
 })();
 </script>
 </body>
 </html>
-
-
