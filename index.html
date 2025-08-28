@@ -3,31 +3,26 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>桃園機場 | 114實習相簿</title>
+<title>桃園機場｜114實習相簿</title>
 
-<!-- 字體：Noto Sans TC（清楚、適合手機） -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
 
 <style>
   :root{
-    /* 顏色 */
     --bg:#0b0f14; --fg:#e8f0ff; --brand:#00c2ff; --muted:#9aa4b2;
-    /* 手機優先的字級，桌面再放大 */
-    --title-size: clamp(16px, 5.5vw, 28px);   /* 第一行大字 */
-    --hint-size:  clamp(11px, 3.6vw, 14px);   /* 第二行小字 */
-    --cap-size:   clamp(13px, 3.8vw, 18px);   /* 左下字幕 */
-    --wm-size:    clamp(12px, 3.5vw, 18px);   /* 右下水印（小螢幕自動隱藏） */
+    --title-size: clamp(16px, 5.5vw, 28px);
+    --hint-size:  clamp(11px, 3.6vw, 14px);
+    --cap-size:   clamp(13px, 3.8vw, 18px);
+    --wm-size:    clamp(12px, 3.5vw, 18px);
     --top-pad: calc(env(safe-area-inset-top, 0px) + 10px);
     --side-pad: calc(env(safe-area-inset-left, 0px) + 12px);
-    --trans: 800ms;                           /* 照片淡入時間 */
+    --trans: 800ms;
   }
-
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg)}
   body{font-family:"Noto Sans TC",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,"PingFang TC","Microsoft JhengHei",sans-serif}
 
-  /* 頂部兩行抬頭（固定在上） */
   .topbar{
     position:fixed;left:0;right:0;top:0;z-index:10;
     padding: var(--top-pad) var(--side-pad) 8px var(--side-pad);
@@ -43,14 +38,31 @@
     text-shadow: 0 1px 1px rgba(0,0,0,.3);
   }
 
-  /* 舞台區：圖片置中顯示 */
+  /* 狀態指示器（右上角） */
+  .status{
+    position:fixed; top:var(--top-pad); right:var(--side-pad); z-index:11;
+    display:flex; align-items:center; gap:8px; color:var(--muted); font-size:var(--hint-size);
+    text-shadow:0 1px 1px rgba(0,0,0,.3);
+    user-select:none; pointer-events:none;
+  }
+  .bars{display:flex; align-items:flex-end; gap:2px; height:12px;}
+  .bar{ width:3px; height:10px; background:var(--brand); opacity:.95; transform-origin:bottom; animation:eq 1s ease-in-out infinite; }
+  .bar:nth-child(2){animation-delay:.15s}
+  .bar:nth-child(3){animation-delay:.30s}
+  @keyframes eq{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+  .paused .bar{ animation:none; opacity:.35 }
+  .status .label{font-weight:700; letter-spacing:.3px}
+  .playing .label::before{ content:"▶ 播放中"; }
+  .paused  .label::before{ content:"⏸ 已暫停"; }
+
+  /* 舞台區 */
   .stage{position:fixed;inset:0;display:grid;place-items:center}
   .wrap{position:relative;width:100%;height:100%}
   .slide{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transition:opacity var(--trans) ease}
   .slide.show{opacity:1}
   img.photo{max-width:100%;max-height:100%;object-fit:contain;image-rendering:auto}
 
-  /* 左下字幕（編號｜名稱） */
+  /* 左下字幕 */
   .caption{
     position:fixed;left:var(--side-pad);
     bottom:calc(env(safe-area-inset-bottom, 0px) + 10px);
@@ -68,35 +80,55 @@
     color:var(--brand);font-weight:900;font-size:var(--wm-size);z-index:10;
     text-shadow:0 1px 2px rgba(0,0,0,.35);
   }
-  @media (max-width: 480px) { .wm{ display:none; } } /* 會擋到就自動隱藏 */
+  @media (max-width: 480px) { .wm{ display:none; } }
 
-  /* 動效無障礙：若使用者偏好減少動態，就關閉動畫 */
+  /* 中央瞬間提示（播放/暫停） */
+  .toast{
+    pointer-events:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%) scale(.9);
+    background:rgba(0,0,0,.55); color:var(--fg); padding:10px 14px; border-radius:999px; font-weight:900;
+    letter-spacing:.5px; opacity:0; z-index:20;
+  }
+  .toast.show{ animation:toast 900ms ease both; }
+  @keyframes toast{
+    0%{opacity:0; transform:translate(-50%,-50%) scale(.85)}
+    18%{opacity:1; transform:translate(-50%,-50%) scale(1)}
+    82%{opacity:1}
+    100%{opacity:0; transform:translate(-50%,-50%) scale(1.05)}
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .slide { transition: none !important; }
     .cap-in { animation: none !important; }
+    .bars .bar{ animation:none !important; }
+    .toast.show{ animation:none !important; opacity:1; }
   }
 </style>
 </head>
 <body>
-  <!-- 手機優先的兩行抬頭 -->
   <div class="topbar">
     <div class="title">桃園機場 <b>TIAC</b>｜114實習相簿</div>
-    <div class="hint">左右滑動：上一張／下一張　點一下：暫停／播放</div>
+    <div class="hint">左右滑動：上一張／下一張　·　點一下：暫停／播放</div>
+  </div>
+
+  <!-- 播放狀態指示器 -->
+  <div id="status" class="status playing">
+    <div class="bars"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+    <span class="label"></span>
   </div>
 
   <div class="stage"><div class="wrap" id="wrap">
-    <!-- 交替淡入用的雙層 -->
     <div class="slide" id="s0"><img class="photo" alt=""></div>
     <div class="slide" id="s1"><img class="photo" alt=""></div>
   </div></div>
 
   <div class="caption" id="cap"></div>
   <div class="wm" id="wm">= 2025 SUMMER =</div>
+  <div class="toast" id="toast"></div>
 
 <script>
-/* 參數（保留你的設定） */
+/* 參數 */
 const MAX_SCAN = 200;
-const EXTS = ['jpg','jpeg','png','webp','JPG','JPEG','PNG','WEBP']; // 大小寫都支援
+const EXTS = ['jpg','jpeg','png','webp','JPG','JPEG','PNG','WEBP'];
 const INTERVAL_MS = 3600;
 const TRANSITION_MS = 800;
 const TYPE_MS_PER_CHAR = 18;
@@ -109,11 +141,11 @@ function preloadOk(url){
     const img = new Image();
     img.onload = ()=>res(true);
     img.onerror = ()=>res(false);
-    img.src = url + (url.includes('?')?'&':'?') + 't=' + Date.now(); // 防快取
+    img.src = url + (url.includes('?')?'&':'?') + 't=' + Date.now();
   });
 }
 
-/* 讀 photos.txt（容錯：trim、BOM、允許「檔名 | 標題」與標題內含 |） */
+/* photos.txt */
 async function listFromTxt(){
   try{
     const r = await fetch('photos/photos.txt',{cache:'no-store'});
@@ -134,7 +166,7 @@ async function listFromTxt(){
   }catch{ return []; }
 }
 
-/* 連號掃描（不中斷，遇缺號照掃到 MAX_SCAN） */
+/* 連號掃描（不中斷） */
 async function listFromScan(){
   const out=[];
   for(let i=1;i<=MAX_SCAN;i++){
@@ -148,8 +180,6 @@ async function listFromScan(){
   }
   return out;
 }
-
-/* 取得清單：先 txt（有就用）→ 否則掃描 */
 async function getPhotos(){
   if(USE_PHOTOS_TXT){
     const a = await listFromTxt();
@@ -158,7 +188,7 @@ async function getPhotos(){
   return await listFromScan();
 }
 
-/* 左下字幕（001｜名稱）＋打字動畫 */
+/* 字幕動畫 */
 let capToken = 0;
 function setCaption(idx, title){
   const cap = document.getElementById('cap');
@@ -169,6 +199,20 @@ function setCaption(idx, title){
   (function step(){ if(my!==capToken) return;
     cap.textContent = text.slice(0, i++); if(i<=text.length) setTimeout(step, TYPE_MS_PER_CHAR);
   })();
+}
+
+/* 狀態 UI */
+const statusEl = document.getElementById('status');
+const toastEl  = document.getElementById('toast');
+function updateStatus(playing){
+  statusEl.classList.toggle('playing', playing);
+  statusEl.classList.toggle('paused',  !playing);
+}
+function flashToast(text){
+  toastEl.textContent = text;
+  toastEl.classList.remove('show'); void toastEl.offsetWidth; // restart
+  toastEl.classList.add('show');
+  setTimeout(()=>toastEl.classList.remove('show'), 900);
 }
 
 (async function main(){
@@ -182,14 +226,13 @@ function setCaption(idx, title){
   s0.style.setProperty('--trans', TRANSITION_MS+'ms');
   s1.style.setProperty('--trans', TRANSITION_MS+'ms');
 
-  let cur=0, showA=true, playing=true, timer=null;
+  let cur=0, showA=true, playing=true;
 
   async function show(idx){
     const ph = photos[idx];
     const target = showA ? s1 : s0;
     const img = target.querySelector('img');
 
-    // 單張容錯：載入失敗就跳下一張
     if(!(await preloadOk(ph.src))){
       cur = (cur+1)%photos.length;
       await show(cur);
@@ -202,52 +245,51 @@ function setCaption(idx, title){
     target.classList.add('show');
     showA = !showA;
 
-    // 預載下一張（不阻塞）
     const nextIdx = (idx+1)%photos.length;
     preloadOk(photos[nextIdx].src);
   }
-
   function next(){ cur = (cur+1)%photos.length; show(cur); }
   function prev(){ cur = (cur-1+photos.length)%photos.length; show(cur); }
 
   await show(0);
   let timerId = setInterval(next, INTERVAL_MS);
+  updateStatus(true);
 
-  /* 播放/暫停：確保不重複開 interval */
   function play(p){
     playing = p;
     clearInterval(timerId);
     if(playing) timerId = setInterval(next, INTERVAL_MS);
+    updateStatus(playing);
   }
 
-  /* 點一下：暫停／播放 */
-  let suppressClickUntil = 0; // 在這時間之前的 click 一律忽略
+  /* 點一下：暫停／播放（防滑動後幽靈點擊） */
+  let suppressClickUntil = 0;
   document.addEventListener('click', () => {
-    if (Date.now() < suppressClickUntil) return;  // 剛滑完就會被擋掉
-    play(!playing);  // 切換播放狀態
+    if (Date.now() < suppressClickUntil) return;
+    play(!playing);
+    flashToast(playing ? "▶ 播放" : "⏸ 暫停");
   });
 
-  /* 手機左右滑動切換 */
+  /* 左右滑動切換，並抑制滑動後的 click */
   let touchX = null;
-  document.addEventListener('touchstart', e => {
-    touchX = e.touches[0].clientX;
-  }, {passive:true});
-
-  document.addEventListener('touchend', e => {
+  document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend',   e => {
     if (touchX == null) return;
     const dx = e.changedTouches[0].clientX - touchX;
     touchX = null;
-    if (Math.abs(dx) > 40) {             // 判定為滑動
+    if (Math.abs(dx) > 40) {
       (dx < 0 ? next() : prev());
-      suppressClickUntil = Date.now() + 350; // 350ms 內忽略 click
+      suppressClickUntil = Date.now() + 350;
     }
   }, {passive:true});
 
+  /* 桌面鍵盤 */
+  document.addEventListener('keydown', e=>{
+    if(e.code==='Space'){ e.preventDefault(); play(!playing); flashToast(playing ? "▶ 播放" : "⏸ 暫停"); }
+    else if(e.key==='ArrowRight'){ next(); }
+    else if(e.key==='ArrowLeft'){  prev(); }
+  });
 })();
 </script>
 </body>
 </html>
-
-
-
-
