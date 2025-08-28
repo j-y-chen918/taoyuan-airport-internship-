@@ -220,20 +220,33 @@ function setCaption(idx, title){
     if(playing) timerId = setInterval(next, INTERVAL_MS);
   }
 
-  /* 點擊切換播放 */
+  /* 點一下：暫停／播放 */
+  let suppressClickUntil = 0; // 在這時間之前的 click 一律忽略
+  document.addEventListener('click', () => {
+    if (Date.now() < suppressClickUntil) return;  // 剛滑完就會被擋掉
+    play(!playing);  // 切換播放狀態
+  });
 
   /* 手機左右滑動切換 */
   let touchX = null;
-  document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, {passive:true});
-  document.addEventListener('touchend',   e => {
+  document.addEventListener('touchstart', e => {
+    touchX = e.touches[0].clientX;
+  }, {passive:true});
+
+  document.addEventListener('touchend', e => {
     if (touchX == null) return;
     const dx = e.changedTouches[0].clientX - touchX;
     touchX = null;
-    if (Math.abs(dx) > 40) (dx < 0 ? next() : prev());
+    if (Math.abs(dx) > 40) {             // 判定為滑動
+      (dx < 0 ? next() : prev());
+      suppressClickUntil = Date.now() + 350; // 350ms 內忽略 click
+    }
   }, {passive:true});
+
 })();
 </script>
 </body>
 </html>
+
 
 
