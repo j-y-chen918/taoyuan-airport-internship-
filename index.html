@@ -3,20 +3,25 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>桃園機場｜114實習相簿</title>
+<title>桃園機場｜實習相簿</title>
+
+<!-- 現代中文無襯線字體 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+
 <style>
   :root{
     --bg:#0b0f14; --fg:#e8f0ff; --brand:#00c2ff; --muted:#94a3b8;
     --brand-size:22px; --hint-size:13px; --cap-size:20px; --wm-size:18px;
-    --trans:800ms;     /* 照片淡入時間 */
+    --trans:800ms; /* 照片淡入時間 */
   }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg)}
-  /* 標楷體字族：Windows（DFKai-SB）/ macOS（BiauKai）/ 其他系統回退 */
-  .kai { font-family: "DFKai-SB","BiauKai","KaiTi","Kaiti TC","PMingLiU","MingLiU",serif; }
+  body{font-family:"Noto Sans TC", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "PingFang TC", "Microsoft JhengHei", sans-serif}
 
   .chrome{position:fixed;inset:0 0 auto 0;height:56px;display:flex;align-items:center;justify-content:space-between;
           padding:0 18px;background:linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,0));z-index:10}
-  .brand{font-weight:800;letter-spacing:.4px;font-size:var(--brand-size)}
+  .brand{font-weight:900;letter-spacing:.4px;font-size:var(--brand-size)}
   .brand b{color:var(--brand)}
   .hint{color:#9aa4b2;font-size:var(--hint-size)}
 
@@ -27,7 +32,7 @@
   img.photo{max-width:100%;max-height:100%;object-fit:contain;image-rendering:auto}
 
   .caption{position:fixed;left:16px;bottom:14px;color:var(--muted);font-size:var(--cap-size)}
-  .wm{position:fixed;right:16px;bottom:12px;color:var(--brand);font-weight:800;font-size:var(--wm-size)}
+  .wm{position:fixed;right:16px;bottom:12px;color:var(--brand);font-weight:900;font-size:var(--wm-size)}
   /* 字幕淡入動畫（搭配 typewriter） */
   .cap-in{animation:capIn .5s ease both}
   @keyframes capIn{from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)}}
@@ -35,16 +40,18 @@
 </head>
 <body>
   <div class="chrome">
-    <div class="brand kai" id="brandL">桃園機場 <b>TIAC</b>｜114實習相簿</div>
-    <div class="hint kai" id="hint">點擊/空白鍵：暫停‧繼續　←/→：上一張/下一張</div>
+    <div class="brand" id="brandL">桃園機場 <b>TIAC</b>｜實習相簿</div>
+    <div class="hint"  id="hint">點擊/空白鍵：暫停‧繼續　←/→：上一張/下一張</div>
   </div>
+
   <div class="stage"><div class="wrap" id="wrap">
     <!-- 交替淡入用的雙層 -->
     <div class="slide" id="s0"><img class="photo" /></div>
     <div class="slide" id="s1"><img class="photo" /></div>
   </div></div>
-  <div class="caption kai" id="cap"></div>
-  <div class="wm kai" id="wm">= 2025 SUMMER =</div>
+
+  <div class="caption" id="cap"></div>
+  <div class="wm" id="wm">= 2025 SUMMER =</div>
 
 <script>
 /* === 幻燈片參數（可調） === */
@@ -57,33 +64,52 @@ const USE_PHOTOS_TXT = true;             // 若有 photos.txt：每行「檔名�
 
 /* === 取得照片清單：先讀 photos.txt → 否則掃描 001.. === */
 async function getPhotos(){
+  // 1) 讀 photos.txt
   if (USE_PHOTOS_TXT){
     try{
       const r = await fetch('photos/photos.txt',{cache:'no-store'});
       if(r.ok){
-        const txt = await r.text();
-        const list = txt.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(line=>{
-          const [name, titleRaw] = line.split('|');
-          const src = `photos/${name}`;
-          const title = (titleRaw ?? name).replace(/\.(jpe?g|png|webp)$/i,'');
-          return {src, title};
-        });
+        const raw = await r.text();
+        // 去除 UTF-8 BOM，並把每行左右空白都 trim 掉；允許「檔名 | 標題」寫法
+        const list = raw
+          .replace(/^\uFEFF/, '')
+          .split(/\r?\n/)
+          .map(s=>s.trim())
+          .filter(Boolean)
+          .map(line=>{
+            const parts = line.split('|');
+            const name = (parts[0] || '').replace(/^\uFEFF/,'').trim();           // 檔名
+            const titleRaw = parts.slice(1).join('|').trim();                     // 允許標題內含 |
+            const src = `photos/${name}`;
+            const title = (titleRaw || name).replace(/\.(jpe?g|png|webp)$/i,'');  // 去掉副檔名
+            return {src, title};
+          })
+          .filter(it => it.src.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/));    // 基本檢查
         if(list.length) return list;
       }
     }catch(e){}
   }
-  const exists = p => fetch(p,{method:'HEAD',cache:'no-store'}).then(r=>r.ok).catch(()=>false);
+
+  // 2) 否則掃描 001..MAX_SCAN（用 Image 預載判斷是否存在；比 HEAD 更相容）
+  const existsByImg = (url)=>new Promise(res=>{
+    const i=new Image(); i.onload=()=>res(true); i.onerror=()=>res(false); i.src=url+'?t='+(Date.now()); // 防快取
+  });
   const out=[];
   for(let i=1;i<=MAX_SCAN;i++){
     const num = String(i).padStart(3,'0'); let hit=null;
-    for(const ext of EXTS){ const p=`photos/${num}.${ext}`; if(await exists(p)){hit=p;break;} }
+    for(const ext of EXTS){
+      const p = `photos/${num}.${ext}`;
+      if(await existsByImg(p)){ hit=p; break; }
+    }
     if(!hit) break;
     out.push({src:hit, title:num});
   }
   return out;
 }
 
-function preload(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
+function preload(src){
+  return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; });
+}
 
 /* 字幕：顯示「001｜自訂名稱」；含 typewriter 動畫 */
 let capToken = 0;
@@ -92,29 +118,21 @@ function setCaption(idx, title){
   const n = String(idx+1).padStart(3,'0');
   const text = `${n}｜${title || ''}`;
   // 重置動畫
-  cap.classList.remove('cap-in');
-  void cap.offsetWidth; // 重新觸發 CSS 動畫
-  cap.classList.add('cap-in');
-
+  cap.classList.remove('cap-in'); void cap.offsetWidth; cap.classList.add('cap-in');
   // typewriter
-  const my = ++capToken;
-  cap.textContent = '';
-  let i=0;
-  function step(){
-    if(my!==capToken) return;       // 如果已被下一張取代就結束
-    cap.textContent = text.slice(0, i++);
-    if(i<=text.length) setTimeout(step, TYPE_MS_PER_CHAR);
-  }
-  step();
+  const my = ++capToken; cap.textContent = ''; let i=0;
+  (function step(){ if(my!==capToken) return;
+    cap.textContent = text.slice(0, i++); if(i<=text.length) setTimeout(step, TYPE_MS_PER_CHAR);
+  })();
 }
 
 (async function main(){
   const photos = await getPhotos();
   if(!photos.length){
-    document.body.innerHTML = "<div style='color:#fff;padding:32px'>找不到任何照片（請在 <code>photos/</code> 放 001.jpg、002.jpg… 或提供 <code>photos.txt</code>）</div>";
+    document.body.innerHTML = "<div style='color:#fff;padding:32px'>找不到任何照片（請在 <code>photos/</code> 放 001.jpg、002.jpg… 或在 <code>photos.txt</code> 每行寫 <code>檔名|字幕</code>；可寫成 <code>001.jpg | 說明</code>）</div>";
     return;
   }
-  // DOM
+
   const s0 = document.getElementById('s0'), s1 = document.getElementById('s1');
   s0.style.setProperty('--trans', TRANSITION_MS+'ms');
   s1.style.setProperty('--trans', TRANSITION_MS+'ms');
@@ -158,4 +176,3 @@ function setCaption(idx, title){
 </script>
 </body>
 </html>
-
