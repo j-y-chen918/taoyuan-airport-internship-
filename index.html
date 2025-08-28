@@ -40,7 +40,7 @@
     text-shadow: 0 1px 1px rgba(0,0,0,.3);
   }
 
-  /* 控制鈕（隨機／循環） */
+  /* 控制鈕（隨機／循環，二選一） */
   .controls{ display:flex; gap:8px; padding-top:2px; }
   .btn{
     -webkit-tap-highlight-color: transparent;
@@ -229,22 +229,23 @@ function flashToast(text){
   /* 播放狀態與順序管理 */
   let playing = true;
   let timerId = null, restartId = null;
-  let shuffleOn = false;
-  let loopOn = true;
+
+  // 只有兩種模式：LOOP（順序循環）或 SHUFFLE（洗牌循環）
+  let playMode = 'LOOP'; // 'LOOP' | 'SHUFFLE'
 
   // 播放順序：order[] 放的是照片索引(0..n-1)，pos 是目前在 order 中的位置
   let order = Array.from({length: photos.length}, (_,i)=>i);
   let pos = 0;
 
-  function rebuildOrder(keepIndex, shuffle){
-    if (shuffle){
+  function rebuildOrder(keepIndex, mode){
+    if (mode === 'SHUFFLE'){
       const rest = Array.from({length: photos.length}, (_,i)=>i).filter(i=>i!==keepIndex);
       shuffleInPlace(rest);
       order = [keepIndex, ...rest];
       pos = 0;
-    }else{
+    }else{ // LOOP
       order = Array.from({length: photos.length}, (_,i)=>i);
-      pos = keepIndex; // 讓目前這張位置對應同一張
+      pos = keepIndex;
     }
   }
 
@@ -257,8 +258,9 @@ function flashToast(text){
 
     if(!(await preloadOk(ph.src))){
       // 失敗就嘗試下一張
-      if (pos < order.length-1) return showAt(pos+1);
-      else return; // 全部都失敗就不動
+      const nextPos = (pos+1) % order.length;
+      if (nextPos !== pos) return showAt(nextPos);
+      else return;
     }
     img.src = ph.src;
     setCaption(idx, ph.title);
@@ -267,33 +269,17 @@ function flashToast(text){
     target.classList.add('show');
 
     // 預載下一張
-    const nextPos = (pos+1 < order.length) ? pos+1 : 0;
-    preloadOk(photos[ order[nextPos] ].src);
+    const prePos = (pos+1) % order.length;
+    preloadOk(photos[ order[prePos] ].src);
   }
 
   function next(){
-    if (pos < order.length - 1){
-      showAt(pos + 1);
-    }else{
-      if (loopOn){
-        showAt(0);
-      }else{
-        flashToast("已到最後一張");
-        playing = false;
-        clearInterval(timerId); clearTimeout(restartId);
-      }
-    }
+    const np = (pos+1) % order.length;  // 兩種模式都循環
+    showAt(np);
   }
   function prev(){
-    if (pos > 0){
-      showAt(pos - 1);
-    }else{
-      if (loopOn){
-        showAt(order.length - 1);
-      }else{
-        flashToast("已到第一張");
-      }
-    }
+    const pp = (pos-1+order.length) % order.length;
+    showAt(pp);
   }
 
   function startInterval(delay = 0){
@@ -348,31 +334,37 @@ function flashToast(text){
     else if(e.key==='ArrowLeft'){  prev(); deferAuto(); }
   });
 
-  /* 隨機／循環按鈕 */
+  /* 隨機／循環按鈕（互斥） */
   const btnShuffle = document.getElementById('btnShuffle');
   const btnLoop    = document.getElementById('btnLoop');
 
   function updateButtons(){
-    btnShuffle.classList.toggle('on', shuffleOn);
-    btnLoop.classList.toggle('on', loopOn);
+    btnShuffle.classList.toggle('on', playMode === 'SHUFFLE');
+    btnLoop.classList.toggle('on',    playMode === 'LOOP');
   }
 
   btnShuffle.addEventListener('click', (e)=>{
     e.stopPropagation(); // 不要觸發全畫面點擊
-    const currentIdx = order[pos];
-    shuffleOn = !shuffleOn;
-    rebuildOrder(currentIdx, shuffleOn); // 重新建立順序，但保留目前這張
-    updateButtons();
-    flashToast(`隨機：${shuffleOn ? "開" : "關"}`);
-    deferAuto();
+    if (playMode !== 'SHUFFLE'){
+      const currentIdx = order[pos];
+      playMode = 'SHUFFLE';
+      rebuildOrder(currentIdx, playMode);
+      updateButtons();
+      flashToast("模式：隨機");
+      deferAuto();
+    }
   });
 
   btnLoop.addEventListener('click', (e)=>{
     e.stopPropagation();
-    loopOn = !loopOn;
-    updateButtons();
-    flashToast(`循環：${loopOn ? "開" : "關"}`);
-    deferAuto();
+    if (playMode !== 'LOOP'){
+      const currentIdx = order[pos];
+      playMode = 'LOOP';
+      rebuildOrder(currentIdx, playMode);
+      updateButtons();
+      flashToast("模式：循環");
+      deferAuto();
+    }
   });
 
   updateButtons();
