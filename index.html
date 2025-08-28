@@ -5,74 +5,77 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>桃園機場｜實習相簿</title>
 <style>
-  :root{ --bg:#0b0f14; --fg:#e8f0ff; --brand:#00c2ff; --muted:#94a3b8 }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui}
+  :root{
+    --bg:#0b0f14; --fg:#e8f0ff; --brand:#00c2ff; --muted:#94a3b8;
+    --brand-size:22px; --hint-size:13px; --cap-size:20px; --wm-size:18px;
+    --trans:800ms;     /* 照片淡入時間 */
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg)}
+  /* 標楷體字族：Windows（DFKai-SB）/ macOS（BiauKai）/ 其他系統回退 */
+  .kai { font-family: "DFKai-SB","BiauKai","KaiTi","Kaiti TC","PMingLiU","MingLiU",serif; }
+
   .chrome{position:fixed;inset:0 0 auto 0;height:56px;display:flex;align-items:center;justify-content:space-between;
           padding:0 18px;background:linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,0));z-index:10}
-  .brand{font-weight:800;letter-spacing:.4px}.brand b{color:var(--brand)}
+  .brand{font-weight:800;letter-spacing:.4px;font-size:var(--brand-size)}
+  .brand b{color:var(--brand)}
+  .hint{color:#9aa4b2;font-size:var(--hint-size)}
+
   .stage{position:fixed;inset:0;display:grid;place-items:center}
   .wrap{position:relative;width:100%;height:100%}
-  .slide{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transition:opacity var(--t,800ms) ease}
+  .slide{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transition:opacity var(--trans) ease}
   .slide.show{opacity:1}
   img.photo{max-width:100%;max-height:100%;object-fit:contain;image-rendering:auto}
-  .caption{position:fixed;left:16px;bottom:14px;color:var(--muted);font-size:14px}
-  .wm{position:fixed;right:16px;bottom:12px;color:var(--brand);font-weight:800}
-  .hint{position:fixed;right:16px;top:12px;color:#9aa4b2;font-size:12px}
+
+  .caption{position:fixed;left:16px;bottom:14px;color:var(--muted);font-size:var(--cap-size)}
+  .wm{position:fixed;right:16px;bottom:12px;color:var(--brand);font-weight:800;font-size:var(--wm-size)}
+  /* 字幕淡入動畫（搭配 typewriter） */
+  .cap-in{animation:capIn .5s ease both}
+  @keyframes capIn{from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
   <div class="chrome">
-    <div class="brand" id="brandL"></div>
-    <div class="hint" id="hint"></div>
+    <div class="brand kai" id="brandL">桃園機場 <b>TIAC</b>｜實習相簿</div>
+    <div class="hint kai" id="hint">點擊/空白鍵：暫停‧繼續　←/→：上一張/下一張</div>
   </div>
   <div class="stage"><div class="wrap" id="wrap">
     <!-- 交替淡入用的雙層 -->
     <div class="slide" id="s0"><img class="photo" /></div>
     <div class="slide" id="s1"><img class="photo" /></div>
   </div></div>
-  <div class="caption" id="cap"></div>
-  <div class="wm" id="wm"></div>
+  <div class="caption kai" id="cap"></div>
+  <div class="wm kai" id="wm">= 2025 SUMMER =</div>
 
 <script>
-/* === 你之後要改字，只改這裡就好 === */
-const TEXT = {
-  BRAND_LEFT: '桃園機場 <b>TIAC</b>｜實習相簿',   // 左上抬頭（支援 <b>）
-  HINT: '點擊/空白鍵：暫停‧繼續　←/→：上一張/下一張 你們好吵', // 右上提示
-  WATERMARK: '= 2025 SUMMER ='                   // 右下角浮水印
-};
-/* === 幻燈片參數（可微調） === */
-const MAX_SCAN = 200;                 // 掃描 photos/001..200
+/* === 幻燈片參數（可調） === */
+const MAX_SCAN = 200;                    // 掃描 photos/001..200
 const EXTS = ['jpg','jpeg','png','webp'];
-const INTERVAL_MS = 3200;             // 每張停留時間
-const TRANSITION_MS = 800;            // 交替淡入時間
-const CAPTION_FROM_NAME = true;       // true：用檔名或 photos.txt 右側標題
-/* === 可選：使用 photos.txt（每行一筆）
-   格式一：001.jpg
-   格式二：001.jpg|見面會（檔名|字幕）  === */
+const INTERVAL_MS = 3600;                // 每張停留時間
+const TRANSITION_MS = 800;               // 照片淡入時間
+const TYPE_MS_PER_CHAR = 18;             // 字幕打字速度（毫秒/字）
+const USE_PHOTOS_TXT = true;             // 若有 photos.txt：每行「檔名」或「檔名|字幕」
 
-document.getElementById('brandL').innerHTML = TEXT.BRAND_LEFT;
-document.getElementById('hint').textContent = TEXT.HINT;
-document.getElementById('wm').textContent = TEXT.WATERMARK;
-
-/* 讀 photos.txt → 否則掃描連號 001.. */
+/* === 取得照片清單：先讀 photos.txt → 否則掃描 001.. === */
 async function getPhotos(){
-  try{
-    const r = await fetch('photos/photos.txt',{cache:'no-store'});
-    if(r.ok){
-      const txt = await r.text();
-      const list = txt.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(line=>{
-        const [name, titleRaw] = line.split('|');
-        const src = `photos/${name}`;
-        const title = (titleRaw ?? name).replace(/\.(jpe?g|png|webp)$/i,'');
-        return {src, title};
-      });
-      if(list.length) return list;
-    }
-  }catch(e){}
+  if (USE_PHOTOS_TXT){
+    try{
+      const r = await fetch('photos/photos.txt',{cache:'no-store'});
+      if(r.ok){
+        const txt = await r.text();
+        const list = txt.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(line=>{
+          const [name, titleRaw] = line.split('|');
+          const src = `photos/${name}`;
+          const title = (titleRaw ?? name).replace(/\.(jpe?g|png|webp)$/i,'');
+          return {src, title};
+        });
+        if(list.length) return list;
+      }
+    }catch(e){}
+  }
   const exists = p => fetch(p,{method:'HEAD',cache:'no-store'}).then(r=>r.ok).catch(()=>false);
   const out=[];
   for(let i=1;i<=MAX_SCAN;i++){
-    const num=String(i).padStart(3,'0'); let hit=null;
+    const num = String(i).padStart(3,'0'); let hit=null;
     for(const ext of EXTS){ const p=`photos/${num}.${ext}`; if(await exists(p)){hit=p;break;} }
     if(!hit) break;
     out.push({src:hit, title:num});
@@ -82,42 +85,64 @@ async function getPhotos(){
 
 function preload(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
 
+/* 字幕：顯示「001｜自訂名稱」；含 typewriter 動畫 */
+let capToken = 0;
+function setCaption(idx, title){
+  const cap = document.getElementById('cap');
+  const n = String(idx+1).padStart(3,'0');
+  const text = `${n}｜${title || ''}`;
+  // 重置動畫
+  cap.classList.remove('cap-in');
+  void cap.offsetWidth; // 重新觸發 CSS 動畫
+  cap.classList.add('cap-in');
+
+  // typewriter
+  const my = ++capToken;
+  cap.textContent = '';
+  let i=0;
+  function step(){
+    if(my!==capToken) return;       // 如果已被下一張取代就結束
+    cap.textContent = text.slice(0, i++);
+    if(i<=text.length) setTimeout(step, TYPE_MS_PER_CHAR);
+  }
+  step();
+}
+
 (async function main(){
   const photos = await getPhotos();
   if(!photos.length){
     document.body.innerHTML = "<div style='color:#fff;padding:32px'>找不到任何照片（請在 <code>photos/</code> 放 001.jpg、002.jpg… 或提供 <code>photos.txt</code>）</div>";
     return;
   }
-
   // DOM
-  const cap = document.getElementById('cap');
   const s0 = document.getElementById('s0'), s1 = document.getElementById('s1');
-  s0.style.setProperty('--t', TRANSITION_MS+'ms');
-  s1.style.setProperty('--t', TRANSITION_MS+'ms');
-  let cur=0, showA=true, playing=true, timer=null;
+  s0.style.setProperty('--trans', TRANSITION_MS+'ms');
+  s1.style.setProperty('--trans', TRANSITION_MS+'ms');
 
-  // 預載第一張與下一張
-  await preload(photos[0].src);
-  const nextIndex = (i)=> (i+1)%photos.length;
+  let cur=0, showA=true, playing=true, timer=null;
 
   async function show(idx){
     const ph = photos[idx];
-    const target = showA ? s1 : s0;            // 下一張放到隱藏層
+    const target = showA ? s1 : s0;                  // 下一張放到隱藏層
     const img = target.querySelector('img');
     await preload(ph.src);
     img.src = ph.src;
-    cap.textContent = CAPTION_FROM_NAME ? (ph.title||'') : '';
+
+    setCaption(idx, ph.title);                       // 左下角：001｜名稱
+
     (showA ? s0 : s1).classList.remove('show');
     target.classList.add('show');
     showA = !showA;
+
     // 預載下一張
-    preload(photos[nextIndex(idx)].src);
+    const next = (idx+1)%photos.length;
+    preload(photos[next].src);
   }
 
-  function next(){ cur = nextIndex(cur); show(cur); }
+  function next(){ cur = (cur+1)%photos.length; show(cur); }
   function prev(){ cur = (cur-1+photos.length)%photos.length; show(cur); }
 
-  // 初始顯示第一張
+  // 初始
   await show(0);
   timer = setInterval(next, INTERVAL_MS);
 
@@ -133,4 +158,3 @@ function preload(src){ return new Promise((res,rej)=>{ const i=new Image(); i.on
 </script>
 </body>
 </html>
-
