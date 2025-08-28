@@ -81,7 +81,7 @@
   <!-- 手機優先的兩行抬頭 -->
   <div class="topbar">
     <div class="title">桃園機場 <b>TIAC</b>｜114實習相簿</div>
-    <div class="hint">左右滑動或點按：上一張／下一張　點一下：暫停／播放</div>
+    <div class="hint">左右滑動：上一張／下一張　點一下：暫停／播放</div>
   </div>
 
   <div class="stage"><div class="wrap" id="wrap">
@@ -220,13 +220,7 @@ function setCaption(idx, title){
     if(playing) timerId = setInterval(next, INTERVAL_MS);
   }
 
-  /* 點擊切換播放；鍵盤左右切換（桌面） */
-  document.addEventListener('click', ()=>play(!playing));
-  document.addEventListener('keydown', e=>{
-    if(e.code==='Space'){ e.preventDefault(); play(!playing); }
-    else if(e.key==='ArrowRight'){ next(); }
-    else if(e.key==='ArrowLeft'){ prev(); }
-  });
+  /* 點擊切換播放 */
 
   /* 手機左右滑動切換 */
   let touchX = null;
@@ -241,4 +235,5 @@ function setCaption(idx, title){
 </script>
 </body>
 </html>
+
 
