@@ -1,0 +1,20 @@
+name: 上傳照片（自動編號）
+description: 拖曳照片到描述欄，並把每張圖片方括號內的文字改成「你想顯示的標題」（alt 文字）。送出後機器人會自動編號與更新相簿。
+title: "照片上傳："
+labels: [auto-upload]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **使用說明（不用寫程式）：**
+        1) 把照片 **拖曳** 到下方「描述（Description）」大白框內（一次可多張）。
+        2) 會出現像這樣的文字：`![image](https://user-images....)`  
+           請把 `![image]` 裡面的 `image` 改成想要的**標題**，例如：`![第一天報到](...)`  
+           （一張一行，順序就是顯示順序）
+        3) 按 **Submit new issue**。幾十秒內機器人會自動匯入、關閉這個 issue。
+
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ 注意：請確保照片是 **jpg / jpeg / png / webp** 其中一種。檔案大小建議每張 < 3MB。
